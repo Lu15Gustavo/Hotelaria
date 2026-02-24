@@ -15,6 +15,15 @@ const pool = new Pool({
   port: 5432
 });
 
+const emptyToNull = (value) => (value === '' || value === undefined ? null : value);
+
+const ensureSchemaCompatibility = async () => {
+  await pool.query('ALTER TABLE reserva ADD COLUMN IF NOT EXISTS id_funcionario INT REFERENCES funcionario(id_funcionario)');
+  await pool.query('ALTER TABLE servico ADD COLUMN IF NOT EXISTS id_reserva INT REFERENCES reserva(id_reserva) ON DELETE CASCADE');
+  await pool.query('ALTER TABLE servico ADD COLUMN IF NOT EXISTS id_funcionario INT REFERENCES funcionario(id_funcionario)');
+  await pool.query('ALTER TABLE servico ADD COLUMN IF NOT EXISTS quantidade INT DEFAULT 1');
+};
+
 // Hóspedes
 app.get('/hospedes', async (req, res) => {
   try {
@@ -208,7 +217,22 @@ app.get('/reservas', async (req, res) => {
 
 app.post('/reservas', async (req, res) => {
   try {
-    const { cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total } = req.body;
+    const cpf_hospede = emptyToNull(req.body.cpf_hospede);
+    const id_quarto = emptyToNull(req.body.id_quarto);
+    const id_funcionario = emptyToNull(req.body.id_funcionario);
+    const data_checkin = emptyToNull(req.body.data_checkin);
+    const data_checkout = emptyToNull(req.body.data_checkout);
+    const status = emptyToNull(req.body.status) || 'Confirmada';
+    const valor_total = emptyToNull(req.body.valor_total);
+
+    if (!cpf_hospede || !id_quarto || !data_checkin || !data_checkout) {
+      return res.status(400).json({ error: 'Campos obrigatórios: cpf_hospede, id_quarto, data_checkin e data_checkout' });
+    }
+
+    if (new Date(data_checkout) < new Date(data_checkin)) {
+      return res.status(400).json({ error: 'data_checkout não pode ser menor que data_checkin' });
+    }
+
     const result = await pool.query('INSERT INTO reserva (cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id_reserva', [cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total]);
     // Se a reserva estiver confirmada (ou não cancelada), marque o quarto como ocupado
     if (status && status.toLowerCase() !== 'cancelada') {
@@ -217,6 +241,12 @@ app.post('/reservas', async (req, res) => {
     res.status(201).json({ message: 'Reserva criada com sucesso!', id_reserva: result.rows[0].id_reserva });
   } catch (err) {
     console.error(err);
+    if (err.code === '22P02') {
+      return res.status(400).json({ error: 'Formato inválido para número ou data em algum campo da reserva' });
+    }
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'CPF do hóspede, quarto ou funcionário não existe' });
+    }
     res.status(500).json({ error: 'Erro ao criar reserva' });
   }
 });
@@ -224,7 +254,22 @@ app.post('/reservas', async (req, res) => {
 app.put('/reservas/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total } = req.body;
+    const cpf_hospede = emptyToNull(req.body.cpf_hospede);
+    const id_quarto = emptyToNull(req.body.id_quarto);
+    const id_funcionario = emptyToNull(req.body.id_funcionario);
+    const data_checkin = emptyToNull(req.body.data_checkin);
+    const data_checkout = emptyToNull(req.body.data_checkout);
+    const status = emptyToNull(req.body.status);
+    const valor_total = emptyToNull(req.body.valor_total);
+
+    if (!cpf_hospede || !id_quarto || !data_checkin || !data_checkout) {
+      return res.status(400).json({ error: 'Campos obrigatórios: cpf_hospede, id_quarto, data_checkin e data_checkout' });
+    }
+
+    if (new Date(data_checkout) < new Date(data_checkin)) {
+      return res.status(400).json({ error: 'data_checkout não pode ser menor que data_checkin' });
+    }
+
     await pool.query('UPDATE reserva SET cpf_hospede=$1, id_quarto=$2, id_funcionario=$3, data_checkin=$4, data_checkout=$5, status=$6, valor_total=$7 WHERE id_reserva=$8', [cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total, id]);
     // Ajustar status do quarto conforme o novo status da reserva
     if (status) {
@@ -238,6 +283,12 @@ app.put('/reservas/:id', async (req, res) => {
     res.json({ message: 'Reserva atualizada' });
   } catch (err) {
     console.error(err);
+    if (err.code === '22P02') {
+      return res.status(400).json({ error: 'Formato inválido para número ou data em algum campo da reserva' });
+    }
+    if (err.code === '23503') {
+      return res.status(400).json({ error: 'CPF do hóspede, quarto ou funcionário não existe' });
+    }
     res.status(500).json({ error: 'Erro ao atualizar reserva' });
   }
 });
@@ -471,7 +522,27 @@ app.get('/pagamentos/:id/detalhes', async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log('Backend rodando na porta 5000');
-});
+const startServer = async () => {
+  try {
+    await ensureSchemaCompatibility();
+    const server = app.listen(5000, () => {
+      console.log('Backend rodando na porta 5000');
+      console.log('Compatibilidade de schema verificada');
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('A porta 5000 já está em uso. Encerre o processo antigo antes de iniciar o backend.');
+      } else {
+        console.error('Erro ao iniciar servidor:', err);
+      }
+      process.exit(1);
+    });
+  } catch (err) {
+    console.error('Falha ao validar schema do banco:', err);
+    process.exit(1);
+  }
+};
+
+startServer();
 

@@ -23,15 +23,6 @@ CREATE TABLE quarto (
     status VARCHAR(20)
 );
 
-CREATE TABLE servico (
-    id_servico SERIAL PRIMARY KEY,
-    id_reserva INT REFERENCES reserva(id_reserva) ON DELETE CASCADE,
-    id_funcionario INT REFERENCES funcionario(id_funcionario),
-    valor_unitario NUMERIC(10,2),
-    categoria VARCHAR(50),
-    quantidade INT DEFAULT 1
-);
-
 CREATE TABLE reserva (
     id_reserva SERIAL PRIMARY KEY,
     cpf_hospede VARCHAR(14) REFERENCES hospede(cpf),
@@ -41,6 +32,15 @@ CREATE TABLE reserva (
     data_checkout DATE,
     status VARCHAR(20),
     valor_total NUMERIC(10,2)
+);
+
+CREATE TABLE servico (
+    id_servico SERIAL PRIMARY KEY,
+    id_reserva INT REFERENCES reserva(id_reserva) ON DELETE CASCADE,
+    id_funcionario INT REFERENCES funcionario(id_funcionario),
+    valor_unitario NUMERIC(10,2),
+    categoria VARCHAR(50),
+    quantidade INT DEFAULT 1
 );
 
 CREATE TABLE pagamento (
@@ -54,7 +54,7 @@ CREATE TABLE pagamento (
 
 -- ==============================
 -- DADOS DE EXEMPLO (INSERTS)
--- Ordem: hospede -> funcionario -> quarto -> servico -> reserva -> pagamento
+-- Ordem: hospede -> funcionario -> quarto -> reserva -> servico -> pagamento
 -- ==============================
 
 -- Populando hospede
@@ -91,20 +91,6 @@ INSERT INTO quarto (numero, tipo, capacidade, valor_diaria, status) VALUES
 (109, 'Suíte', 2, 320.00, 'Livre'),
 (110, 'Suíte Master', 3, 420.00, 'Livre');
 
--- Populando servico (associando serviços adicionais a reservas e funcionários)
--- Serviços estão agora vinculados a reservas e ao funcionário que realizou
-INSERT INTO servico (id_servico, id_reserva, id_funcionario, valor_unitario, categoria, quantidade) VALUES
-(1, 1, 1, 100.00, 'Spa', 1),              -- Reserva 1: Spa (Pedro)
-(2, 1, 3, 50.00, 'Café da manhã', 3),      -- Reserva 1: Café da manhã (Roberto)
-(3, 2, 4, 40.00, 'Transporte', 1),         -- Reserva 2: Transporte (Patricia)
-(4, 4, 1, 15.00, 'Estacionamento', 3),     -- Reserva 4: Estacionamento (Pedro)
-(5, 5, 5, 80.00, 'Jantar', 3),             -- Reserva 5: Jantar (Lucas)
-(6, 6, 2, 100.00, 'Spa', 2),               -- Reserva 6: Spa (Juliana)
-(7, 7, 3, 50.00, 'Café da manhã', 3),      -- Reserva 7: Café da manhã (Roberto)
-(8, 8, 4, 30.00, 'Lavanderia', 3),         -- Reserva 8: Lavanderia (Patricia)
-(9, 9, 5, 20.00, 'Internet', 2),           -- Reserva 9: Internet (Lucas)
-(10, 10, 1, 80.00, 'Jantar', 4);           -- Reserva 10: Jantar (Pedro)
-
 -- Populando reserva (inserindo id_reserva explicitamente para controle)
 -- OBS: os quartos foram inseridos sem especificar `id_quarto` (serial),
 -- portanto seus ids serão 1..10 na mesma ordem.
@@ -121,6 +107,20 @@ INSERT INTO reserva (id_reserva, cpf_hospede, id_quarto, id_funcionario, data_ch
 (9, '666.777.888-99', 9, 3, '2026-03-04', '2026-03-06', 'Confirmada', 640.00),
 (10,'777.888.999-00',10, 4, '2026-03-05', '2026-03-09', 'Confirmada', 1680.00);
 
+-- Populando servico (associando serviços adicionais a reservas e funcionários)
+-- Serviços estão agora vinculados a reservas e ao funcionário que realizou
+INSERT INTO servico (id_servico, id_reserva, id_funcionario, valor_unitario, categoria, quantidade) VALUES
+(1, 1, 1, 100.00, 'Spa', 1),              -- Reserva 1: Spa (Pedro)
+(2, 1, 3, 50.00, 'Café da manhã', 3),      -- Reserva 1: Café da manhã (Roberto)
+(3, 2, 4, 40.00, 'Transporte', 1),         -- Reserva 2: Transporte (Patricia)
+(4, 4, 1, 15.00, 'Estacionamento', 3),     -- Reserva 4: Estacionamento (Pedro)
+(5, 5, 5, 80.00, 'Jantar', 3),             -- Reserva 5: Jantar (Lucas)
+(6, 6, 2, 100.00, 'Spa', 2),               -- Reserva 6: Spa (Juliana)
+(7, 7, 3, 50.00, 'Café da manhã', 3),      -- Reserva 7: Café da manhã (Roberto)
+(8, 8, 4, 30.00, 'Lavanderia', 3),         -- Reserva 8: Lavanderia (Patricia)
+(9, 9, 5, 20.00, 'Internet', 2),           -- Reserva 9: Internet (Lucas)
+(10, 10, 1, 80.00, 'Jantar', 4);           -- Reserva 10: Jantar (Pedro)
+
 -- Populando pagamento (referenciando reservas já inseridas)
 INSERT INTO pagamento (id_pagamento, id_reserva, data_pagamento, valor, forma_pagamento, status) VALUES
 (1, 1, '2026-02-20', 480.00, 'Cartão de Crédito', 'Pago'),
@@ -133,11 +133,4 @@ INSERT INTO pagamento (id_pagamento, id_reserva, data_pagamento, valor, forma_pa
 (8, 8, '2026-03-03', 750.00, 'Dinheiro', 'Pago'),
 (9, 9, '2026-03-04', 640.00, 'Cartão de Débito', 'Pago'),
 (10,10, '2026-03-05', 1680.00,'Cartão de Crédito', 'Pendente');
-
--- Ajustar sequências para os próximos valores automáticos (PostgreSQL)
-SELECT setval(pg_get_serial_sequence('funcionario','id_funcionario'), COALESCE((SELECT MAX(id_funcionario) FROM funcionario),0)+1, false);
-SELECT setval(pg_get_serial_sequence('quarto','id_quarto'), COALESCE((SELECT MAX(id_quarto) FROM quarto),0)+1, false);
-SELECT setval(pg_get_serial_sequence('servico','id_servico'), COALESCE((SELECT MAX(id_servico) FROM servico),0)+1, false);
-SELECT setval(pg_get_serial_sequence('reserva','id_reserva'), COALESCE((SELECT MAX(id_reserva) FROM reserva),0)+1, false);
-SELECT setval(pg_get_serial_sequence('pagamento','id_pagamento'), COALESCE((SELECT MAX(id_pagamento) FROM pagamento),0)+1, false);
 
