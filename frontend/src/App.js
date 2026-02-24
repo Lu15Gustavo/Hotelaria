@@ -40,6 +40,12 @@ function App() {
     return dt.toLocaleDateString('pt-BR');
   };
 
+  const formatMoney = (value) => {
+    const numericValue = Number(value);
+    if (Number.isNaN(numericValue)) return '0.00';
+    return numericValue.toFixed(2);
+  };
+
   useEffect(() => {
     loadAll();
   }, []);
@@ -161,8 +167,58 @@ function App() {
   };
 
   const addReserva = async () => {
-    if (!reservaForm.cpf_hospede || !reservaForm.id_quarto) { alert('Preencha CPF e ID do Quarto'); return; }
-    try { await api.post('/reservas', reservaForm); setReservaForm({ cpf_hospede: '', id_quarto: '', id_funcionario: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' }); loadAll(); } catch (err) { alert('Erro ao adicionar'); }
+    if (!reservaForm.cpf_hospede || !reservaForm.id_quarto || !reservaForm.data_checkin || !reservaForm.data_checkout) {
+      alert('Preencha CPF, ID do Quarto, Check-in e Check-out');
+      return;
+    }
+
+    const cpfHospede = reservaForm.cpf_hospede.trim();
+    const quartoId = Number(reservaForm.id_quarto);
+    const funcionarioId = reservaForm.id_funcionario ? Number(reservaForm.id_funcionario) : null;
+
+    const hospedeExiste = hospedes.some(h => h.cpf === cpfHospede);
+    if (!hospedeExiste) {
+      alert('CPF do hóspede não encontrado. Cadastre o hóspede primeiro ou selecione um CPF válido.');
+      return;
+    }
+
+    const quartoExiste = quartos.some(q => Number(q.id_quarto) === quartoId);
+    if (!quartoExiste) {
+      alert('ID do quarto não encontrado.');
+      return;
+    }
+
+    if (funcionarioId !== null) {
+      const funcionarioExiste = funcionarios.some(f => Number(f.id_funcionario) === funcionarioId);
+      if (!funcionarioExiste) {
+        alert('Funcionário selecionado não existe.');
+        return;
+      }
+    }
+
+    if (new Date(reservaForm.data_checkout) < new Date(reservaForm.data_checkin)) {
+      alert('A data de check-out não pode ser menor que a data de check-in');
+      return;
+    }
+
+    const payload = {
+      cpf_hospede: cpfHospede,
+      id_quarto: quartoId,
+      id_funcionario: funcionarioId,
+      data_checkin: reservaForm.data_checkin,
+      data_checkout: reservaForm.data_checkout,
+      status: reservaForm.status || 'Confirmada',
+      valor_total: reservaForm.valor_total ? Number(reservaForm.valor_total) : null
+    };
+
+    try {
+      await api.post('/reservas', payload);
+      setReservaForm({ cpf_hospede: '', id_quarto: '', id_funcionario: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' });
+      loadAll();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Erro ao adicionar reserva';
+      alert(msg);
+    }
   };
 
   const deleteReserva = async (id) => {
@@ -371,7 +427,7 @@ function App() {
                     <ul className="related-list">
                       {detailsReserva.servicos.map(s => (
                         <li key={s.id_servico}>
-                          <strong>{s.categoria}</strong> | Qtd: {s.quantidade} | R$ {s.valor_total?.toFixed(2) || (s.quantidade * s.valor_unitario).toFixed(2)}<br />
+                          <strong>{s.categoria}</strong> | Qtd: {s.quantidade} | R$ {formatMoney(s.valor_total ?? (Number(s.quantidade) * Number(s.valor_unitario)))}<br />
                           <small>Valor unitário: R$ {s.valor_unitario} | Funcionário: {s.funcionario_nome || 'Desconhecido'}</small>
                         </li>
                       ))}
@@ -406,11 +462,11 @@ function App() {
           </div>
           <ul className="list">
             {servicos.map(s => (<li key={s.id_servico} className="list-item">
-              <div className="item-info"><strong>{s.categoria}</strong> (Reserva #{s.id_reserva}) - <small>{funcionarios.find(f => f.id_funcionario === s.id_funcionario)?.nome || 'Desconhecido'}</small><br /><small>R$ {s.valor_unitario} × {s.quantidade} = R$ {(s.quantidade * s.valor_unitario).toFixed(2)}</small></div>
+              <div className="item-info"><strong>{s.categoria}</strong> (Reserva #{s.id_reserva}) - <small>{funcionarios.find(f => f.id_funcionario === s.id_funcionario)?.nome || 'Desconhecido'}</small><br /><small>R$ {s.valor_unitario} × {s.quantidade} = R$ {formatMoney(Number(s.quantidade) * Number(s.valor_unitario))}</small></div>
               <button className="delete-btn" onClick={() => deleteServico(s.id_servico)}>Deletar</button>
             </li>))}
           </ul>
-        </section>)}}
+        </section>)}
         {activeTab === 'pagamentos' && (<section>
           <h2>Pagamentos</h2>
           <div className="form-container">
