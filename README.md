@@ -20,26 +20,6 @@ Sistema completo de gerenciamento hoteleiro desenvolvido como projeto prático d
 - **Banco de Dados**: PostgreSQL 14+
 - **Driver BD**: node-postgres (pg)
 
-### Estrutura de Pastas
-```
-Hotelaria/
-├── backend/
-│   ├── index.js          # API REST com SQL puro
-│   ├── package.json
-│   └── node_modules/
-├── frontend/
-│   ├── src/
-│   │   ├── App.js        # Interface principal
-│   │   ├── App.css       # Estilização
-│   │   └── index.js
-│   ├── public/
-│   ├── package.json
-│   └── node_modules/
-├── hotelaria.sql         # Schema do banco (vazio - criado via migrations)
-├── testes_sql.sql        # Scripts de teste para PGAdmin 4
-└── README.md
-```
-
 ## 📊 Modelo de Dados
 
 ### Entidades Principais
