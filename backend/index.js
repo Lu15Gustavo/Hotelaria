@@ -359,9 +359,7 @@ app.delete('/pagamentos/:id', async (req, res) => {
   }
 });
 
-// Rotas de Busca e Detalhes com Informações Relacionadas
 
-// Detalhes de Hóspede com suas Reservas
 app.get('/hospedes/:cpf/detalhes', async (req, res) => {
   try {
     const { cpf } = req.params;
@@ -426,7 +424,7 @@ app.get('/quartos/buscar/:numero', async (req, res) => {
   try {
     const { numero } = req.params;
     const result = await pool.query(
-      'SELECT id_quarto, numero, tipo, capacidade, valor_diaria, status FROM quarto WHERE numero LIKE $1 ORDER BY numero',
+      'SELECT id_quarto, numero, tipo, capacidade, valor_diaria, status FROM quarto WHERE numero::text LIKE $1 ORDER BY numero',
       [`%${numero}%`]
     );
     res.json(result.rows);
