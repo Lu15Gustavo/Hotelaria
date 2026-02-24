@@ -132,6 +132,7 @@ O frontend abrirá automaticamente em `http://localhost:3000`.
 ## 👥 Autor
 
 Projeto desenvolvido para a disciplina de Banco de Dados.
+Livia Gandra || Luís Gustavo || Thiago Ker || Tiago Henrique
 
 ## 📄 Licença
 
