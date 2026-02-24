@@ -14,8 +14,8 @@ function App() {
   const [hospedeForm, setHospedeForm] = useState({ cpf: '', nome: '', telefone: '', email: '' });
   const [quartoForm, setQuartoForm] = useState({ numero: '', tipo: '', capacidade: '', valor_diaria: '', status: 'Livre' });
   const [funcionarioForm, setFuncionarioForm] = useState({ nome: '', cargo: '', cpf: '' });
-  const [reservaForm, setReservaForm] = useState({ cpf_hospede: '', id_quarto: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' });
-  const [servicoForm, setServicoForm] = useState({ valor_unitario: '', categoria: '' });
+  const [reservaForm, setReservaForm] = useState({ cpf_hospede: '', id_quarto: '', id_funcionario: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' });
+  const [servicoForm, setServicoForm] = useState({ id_reserva: '', id_funcionario: '', valor_unitario: '', categoria: '', quantidade: 1 });
   const [pagamentoForm, setPagamentoForm] = useState({ id_reserva: '', data_pagamento: '', valor: '', forma_pagamento: 'Cartão de Crédito', status: 'Pago' });
 
   // Estados para Busca e Detalhes
@@ -162,7 +162,7 @@ function App() {
 
   const addReserva = async () => {
     if (!reservaForm.cpf_hospede || !reservaForm.id_quarto) { alert('Preencha CPF e ID do Quarto'); return; }
-    try { await api.post('/reservas', reservaForm); setReservaForm({ cpf_hospede: '', id_quarto: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' }); loadAll(); } catch (err) { alert('Erro ao adicionar'); }
+    try { await api.post('/reservas', reservaForm); setReservaForm({ cpf_hospede: '', id_quarto: '', id_funcionario: '', data_checkin: '', data_checkout: '', status: 'Confirmada', valor_total: '' }); loadAll(); } catch (err) { alert('Erro ao adicionar'); }
   };
 
   const deleteReserva = async (id) => {
@@ -170,8 +170,8 @@ function App() {
   };
 
   const addServico = async () => {
-    if (!servicoForm.valor_unitario || !servicoForm.categoria) { alert('Preencha Valor e Categoria'); return; }
-    try { await api.post('/servicos', servicoForm); setServicoForm({ valor_unitario: '', categoria: '' }); loadAll(); } catch (err) { alert('Erro ao adicionar'); }
+    if (!servicoForm.id_reserva || !servicoForm.id_funcionario || !servicoForm.valor_unitario || !servicoForm.categoria) { alert('Preencha todos os campos'); return; }
+    try { await api.post('/servicos', servicoForm); setServicoForm({ id_reserva: '', id_funcionario: '', valor_unitario: '', categoria: '', quantidade: 1 }); loadAll(); } catch (err) { alert('Erro ao adicionar'); }
   };
 
   const deleteServico = async (id) => {
@@ -320,6 +320,10 @@ function App() {
             <input type="date" value={reservaForm.data_checkout} onChange={e => setReservaForm({ ...reservaForm, data_checkout: e.target.value })} />
             <input type="number" placeholder="Valor Total" value={reservaForm.valor_total} onChange={e => setReservaForm({ ...reservaForm, valor_total: e.target.value })} />
             <select value={reservaForm.status} onChange={e => setReservaForm({ ...reservaForm, status: e.target.value })}><option>Confirmada</option><option>Cancelada</option><option>Finalizada</option></select>
+            <select value={reservaForm.id_funcionario} onChange={e => setReservaForm({ ...reservaForm, id_funcionario: e.target.value })}>
+              <option value="">Selecionar Funcionário</option>
+              {funcionarios.map(f => (<option key={f.id_funcionario} value={f.id_funcionario}>{f.nome} ({f.cargo})</option>))}
+            </select>
             <button onClick={addReserva}>Adicionar</button>
           </div>
           <div className="search-container">
@@ -342,6 +346,9 @@ function App() {
                   <h4>Quarto:</h4>
                   <p><strong>Quarto {detailsReserva.reserva?.quarto_numero}</strong> ({detailsReserva.reserva?.quarto_tipo})</p>
                   <hr />
+                  <h4>Funcionário (Responsável):</h4>
+                  <p><strong>{detailsReserva.reserva?.funcionario_nome || 'Não atribuído'}</strong> {detailsReserva.reserva?.cargo && `(${detailsReserva.reserva?.cargo})`}</p>
+                  <hr />
                   <h4>Período:</h4>
                   <p>{formatDate(detailsReserva.reserva?.data_checkin)} → {formatDate(detailsReserva.reserva?.data_checkout)}</p>
                   <p><strong>Status:</strong> <span className={`status-${detailsReserva.reserva?.status.toLowerCase()}`}>{detailsReserva.reserva?.status}</span></p>
@@ -358,13 +365,25 @@ function App() {
                       ))}
                     </ul>
                   ) : <p><em>Sem pagamentos registrados</em></p>}
+                  <hr />
+                  <h4>Serviços Adicionais:</h4>
+                  {detailsReserva.servicos && detailsReserva.servicos.length > 0 ? (
+                    <ul className="related-list">
+                      {detailsReserva.servicos.map(s => (
+                        <li key={s.id_servico}>
+                          <strong>{s.categoria}</strong> | Qtd: {s.quantidade} | R$ {s.valor_total?.toFixed(2) || (s.quantidade * s.valor_unitario).toFixed(2)}<br />
+                          <small>Valor unitário: R$ {s.valor_unitario} | Funcionário: {s.funcionario_nome || 'Desconhecido'}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p><em>Sem serviços adicionais</em></p>}
                 </div>
               </div>
             </div>
           )}
           <ul className="list">
             {reservas.map(r => (<li key={r.id_reserva} className="list-item list-clickable" onClick={() => loadReservaDetails(r.id_reserva)}>
-              <div className="item-info"><strong>Reserva #{r.id_reserva}</strong><br /><small>{r.cpf_hospede} | Quarto {r.id_quarto}</small><br /><small>{formatDate(r.data_checkin)} até {formatDate(r.data_checkout)} | R$ {r.valor_total} | {r.status}</small></div>
+              <div className="item-info"><strong>Reserva #{r.id_reserva}</strong><br /><small>{r.cpf_hospede} | Quarto {r.id_quarto} {r.funcionario_nome && `| ${r.funcionario_nome}`}</small><br /><small>{formatDate(r.data_checkin)} até {formatDate(r.data_checkout)} | R$ {r.valor_total} | {r.status}</small></div>
               <button className="delete-btn" onClick={(e) => { e.stopPropagation(); deleteReserva(r.id_reserva); }}>Deletar</button>
             </li>))}
           </ul>
@@ -372,17 +391,26 @@ function App() {
         {activeTab === 'servicos' && (<section>
           <h2>Serviços</h2>
           <div className="form-container">
-            <input type="number" placeholder="Valor" value={servicoForm.valor_unitario} onChange={e => setServicoForm({ ...servicoForm, valor_unitario: e.target.value })} />
+            <select value={servicoForm.id_reserva} onChange={e => setServicoForm({ ...servicoForm, id_reserva: e.target.value })}>
+              <option value="">Selecionar Reserva</option>
+              {reservas.map(r => (<option key={r.id_reserva} value={r.id_reserva}>Reserva #{r.id_reserva} - {r.cpf_hospede}</option>))}
+            </select>
+            <select value={servicoForm.id_funcionario} onChange={e => setServicoForm({ ...servicoForm, id_funcionario: e.target.value })}>
+              <option value="">Selecionar Funcionário</option>
+              {funcionarios.map(f => (<option key={f.id_funcionario} value={f.id_funcionario}>{f.nome} ({f.cargo})</option>))}
+            </select>
             <input type="text" placeholder="Categoria" value={servicoForm.categoria} onChange={e => setServicoForm({ ...servicoForm, categoria: e.target.value })} />
+            <input type="number" placeholder="Valor Unitário" step="0.01" value={servicoForm.valor_unitario} onChange={e => setServicoForm({ ...servicoForm, valor_unitario: e.target.value })} />
+            <input type="number" placeholder="Quantidade" min="1" value={servicoForm.quantidade} onChange={e => setServicoForm({ ...servicoForm, quantidade: e.target.value })} />
             <button onClick={addServico}>Adicionar</button>
           </div>
           <ul className="list">
             {servicos.map(s => (<li key={s.id_servico} className="list-item">
-              <div className="item-info"><strong>{s.categoria}</strong> - R$ {s.valor_unitario}</div>
+              <div className="item-info"><strong>{s.categoria}</strong> (Reserva #{s.id_reserva}) - <small>{funcionarios.find(f => f.id_funcionario === s.id_funcionario)?.nome || 'Desconhecido'}</small><br /><small>R$ {s.valor_unitario} × {s.quantidade} = R$ {(s.quantidade * s.valor_unitario).toFixed(2)}</small></div>
               <button className="delete-btn" onClick={() => deleteServico(s.id_servico)}>Deletar</button>
             </li>))}
           </ul>
-        </section>)}
+        </section>)}}
         {activeTab === 'pagamentos' && (<section>
           <h2>Pagamentos</h2>
           <div className="form-container">

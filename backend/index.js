@@ -153,7 +153,7 @@ app.delete('/quartos/:id', async (req, res) => {
 // Serviços
 app.get('/servicos', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id_servico, valor_unitario, categoria FROM servico ORDER BY categoria');
+    const result = await pool.query('SELECT id_servico, id_reserva, id_funcionario, valor_unitario, categoria, quantidade FROM servico ORDER BY id_reserva DESC, categoria');
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -163,8 +163,8 @@ app.get('/servicos', async (req, res) => {
 
 app.post('/servicos', async (req, res) => {
   try {
-    const { valor_unitario, categoria } = req.body;
-    await pool.query('INSERT INTO servico (valor_unitario, categoria) VALUES ($1, $2)', [valor_unitario, categoria]);
+    const { id_reserva, id_funcionario, valor_unitario, categoria, quantidade } = req.body;
+    await pool.query('INSERT INTO servico (id_reserva, id_funcionario, valor_unitario, categoria, quantidade) VALUES ($1, $2, $3, $4, $5)', [id_reserva, id_funcionario, valor_unitario, categoria, quantidade || 1]);
     res.status(201).json({ message: 'Serviço criado com sucesso!' });
   } catch (err) {
     console.error(err);
@@ -175,8 +175,8 @@ app.post('/servicos', async (req, res) => {
 app.put('/servicos/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { valor_unitario, categoria } = req.body;
-    await pool.query('UPDATE servico SET valor_unitario=$1, categoria=$2 WHERE id_servico=$3', [valor_unitario, categoria, id]);
+    const { id_reserva, id_funcionario, valor_unitario, categoria, quantidade } = req.body;
+    await pool.query('UPDATE servico SET id_reserva=$1, id_funcionario=$2, valor_unitario=$3, categoria=$4, quantidade=$5 WHERE id_servico=$6', [id_reserva, id_funcionario, valor_unitario, categoria, quantidade || 1, id]);
     res.json({ message: 'Serviço atualizado' });
   } catch (err) {
     console.error(err);
@@ -198,7 +198,7 @@ app.delete('/servicos/:id', async (req, res) => {
 // Reservas
 app.get('/reservas', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id_reserva, cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total FROM reserva ORDER BY data_checkin DESC');
+    const result = await pool.query('SELECT id_reserva, cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total FROM reserva ORDER BY data_checkin DESC');
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -208,8 +208,8 @@ app.get('/reservas', async (req, res) => {
 
 app.post('/reservas', async (req, res) => {
   try {
-    const { cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total } = req.body;
-    const result = await pool.query('INSERT INTO reserva (cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_reserva', [cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total]);
+    const { cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total } = req.body;
+    const result = await pool.query('INSERT INTO reserva (cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id_reserva', [cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total]);
     // Se a reserva estiver confirmada (ou não cancelada), marque o quarto como ocupado
     if (status && status.toLowerCase() !== 'cancelada') {
       await pool.query("UPDATE quarto SET status=$1 WHERE id_quarto=$2", ['Ocupado', id_quarto]);
@@ -224,8 +224,8 @@ app.post('/reservas', async (req, res) => {
 app.put('/reservas/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total } = req.body;
-    await pool.query('UPDATE reserva SET cpf_hospede=$1, id_quarto=$2, data_checkin=$3, data_checkout=$4, status=$5, valor_total=$6 WHERE id_reserva=$7', [cpf_hospede, id_quarto, data_checkin, data_checkout, status, valor_total, id]);
+    const { cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total } = req.body;
+    await pool.query('UPDATE reserva SET cpf_hospede=$1, id_quarto=$2, id_funcionario=$3, data_checkin=$4, data_checkout=$5, status=$6, valor_total=$7 WHERE id_reserva=$8', [cpf_hospede, id_quarto, id_funcionario, data_checkin, data_checkout, status, valor_total, id]);
     // Ajustar status do quarto conforme o novo status da reserva
     if (status) {
       const low = status.toLowerCase();
@@ -385,17 +385,19 @@ app.get('/quartos/buscar/:numero', async (req, res) => {
   }
 });
 
-// Detalhes de Reserva com Hóspede e Quarto
+// Detalhes de Reserva com Hóspede, Quarto e Funcionário
 app.get('/reservas/:id/detalhes', async (req, res) => {
   try {
     const { id } = req.params;
     const reserva = await pool.query(
       `SELECT r.id_reserva, r.cpf_hospede, h.nome as hospede_nome, h.email, h.telefone,
               r.id_quarto, q.numero as quarto_numero, q.tipo as quarto_tipo,
+              r.id_funcionario, f.nome as funcionario_nome, f.cargo,
               r.data_checkin, r.data_checkout, r.status, r.valor_total
        FROM reserva r 
        JOIN hospede h ON r.cpf_hospede = h.cpf 
        JOIN quarto q ON r.id_quarto = q.id_quarto 
+       LEFT JOIN funcionario f ON r.id_funcionario = f.id_funcionario 
        WHERE r.id_reserva=$1`, 
       [id]
     );
@@ -406,7 +408,15 @@ app.get('/reservas/:id/detalhes', async (req, res) => {
       'SELECT id_pagamento, data_pagamento, valor, forma_pagamento, status FROM pagamento WHERE id_reserva=$1 ORDER BY data_pagamento DESC',
       [id]
     );
-    res.json({ reserva: reserva.rows[0], pagamentos: pagamentos.rows });
+    const servicos = await pool.query(
+      `SELECT s.id_servico, s.id_funcionario, f.nome as funcionario_nome, s.valor_unitario, s.categoria, s.quantidade, (s.quantidade * s.valor_unitario) as valor_total
+       FROM servico s
+       LEFT JOIN funcionario f ON s.id_funcionario = f.id_funcionario
+       WHERE s.id_reserva = $1
+       ORDER BY s.id_servico`,
+      [id]
+    );
+    res.json({ reserva: reserva.rows[0], pagamentos: pagamentos.rows, servicos: servicos.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar detalhes' });
@@ -419,10 +429,12 @@ app.get('/reservas/buscar/:termo', async (req, res) => {
     const { termo } = req.params;
     const result = await pool.query(
       `SELECT r.id_reserva, r.cpf_hospede, h.nome, q.numero as quarto_numero,
+              r.id_funcionario, f.nome as funcionario_nome,
               r.data_checkin, r.data_checkout, r.status, r.valor_total
        FROM reserva r 
        JOIN hospede h ON r.cpf_hospede = h.cpf 
        JOIN quarto q ON r.id_quarto = q.id_quarto 
+       LEFT JOIN funcionario f ON r.id_funcionario = f.id_funcionario 
        WHERE r.id_reserva::text LIKE $1 OR LOWER(h.nome) LIKE LOWER($2) OR r.cpf_hospede LIKE $3
        ORDER BY r.data_checkin DESC`,
       [`%${termo}%`, `%${termo}%`, `%${termo}%`]
